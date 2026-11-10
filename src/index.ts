@@ -55,14 +55,29 @@ export const P0_PERMISSIONS = [
   'host.notification.show'
 ] as const;
 
+const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requireExactFields(value: Record<string, unknown>, fields: string[], label: string) {
+  const allowed = new Set(fields);
+  const unknown = Object.keys(value).find((field) => !allowed.has(field));
+  if (unknown) {
+    throw new ManifestValidationError('MANIFEST_INVALID', `${label} contains unknown field: ${unknown}`);
+  }
 }
 
 export function parseManifest(value: unknown): PluginManifest {
   if (!isRecord(value)) {
     throw new ManifestValidationError('MANIFEST_INVALID', 'Manifest must be an object');
   }
+  requireExactFields(
+    value,
+    ['schemaVersion', 'appId', 'name', 'version', 'publisher', 'target', 'hostApi', 'ui', 'permissions', 'files'],
+    'manifest'
+  );
   if (value.schemaVersion !== 1) {
     throw new ManifestValidationError(
       'MANIFEST_SCHEMA_UNSUPPORTED',
@@ -77,14 +92,15 @@ export function parseManifest(value: unknown): PluginManifest {
   }
   if (
     typeof value.version !== 'string' ||
-    !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
-      value.version
-    )
+    !SEMVER_PATTERN.test(value.version)
   ) {
     throw new ManifestValidationError('MANIFEST_VERSION_INVALID', 'version must be SemVer');
   }
+  if (!isRecord(value.publisher)) {
+    throw new ManifestValidationError('MANIFEST_PUBLISHER_INVALID', 'publisher is invalid');
+  }
+  requireExactFields(value.publisher, ['id', 'name', 'keyId'], 'publisher');
   if (
-    !isRecord(value.publisher) ||
     typeof value.publisher.id !== 'string' ||
     typeof value.publisher.name !== 'string' ||
     typeof value.publisher.keyId !== 'string' ||
@@ -94,15 +110,24 @@ export function parseManifest(value: unknown): PluginManifest {
   ) {
     throw new ManifestValidationError('MANIFEST_PUBLISHER_INVALID', 'publisher is invalid');
   }
+  if (!isRecord(value.target)) {
+    throw new ManifestValidationError('MANIFEST_TARGET_INVALID', 'target is invalid');
+  }
+  requireExactFields(value.target, ['os', 'arch'], 'target');
   if (
-    !isRecord(value.target) ||
     !['macos', 'windows', 'linux'].includes(String(value.target.os)) ||
     !['aarch64', 'x86_64'].includes(String(value.target.arch))
   ) {
     throw new ManifestValidationError('MANIFEST_TARGET_INVALID', 'target is invalid');
   }
+  if (!isRecord(value.hostApi)) {
+    throw new ManifestValidationError(
+      'MANIFEST_HOST_API_UNSUPPORTED',
+      'Host API range must target major version 1'
+    );
+  }
+  requireExactFields(value.hostApi, ['min', 'max'], 'hostApi');
   if (
-    !isRecord(value.hostApi) ||
     typeof value.hostApi.min !== 'string' ||
     !/^1\.\d+\.\d+$/.test(value.hostApi.min) ||
     value.hostApi.max !== '1.x'
@@ -147,8 +172,14 @@ export function parseManifest(value: unknown): PluginManifest {
       );
     }
   }
+  if (!isRecord(value.ui)) {
+    throw new ManifestValidationError(
+      'MANIFEST_ENTRY_MISSING',
+      'UI entry must be declared in files'
+    );
+  }
+  requireExactFields(value.ui, ['entry'], 'ui');
   if (
-    !isRecord(value.ui) ||
     typeof value.ui.entry !== 'string' ||
     !(value.ui.entry in value.files)
   ) {

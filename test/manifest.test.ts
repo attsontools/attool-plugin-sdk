@@ -46,6 +46,13 @@ describe('plugin manifest contract', () => {
     const invalidCases: Array<[string, unknown, string]> = [
       ['schema major', { ...codecManifest, schemaVersion: 2 }, 'MANIFEST_SCHEMA_UNSUPPORTED'],
       ['app id', { ...codecManifest, appId: '../codec' }, 'MANIFEST_APP_ID_INVALID'],
+      ['version', { ...codecManifest, version: '1.0.0-alpha..1' }, 'MANIFEST_VERSION_INVALID'],
+      ['unknown root field', { ...codecManifest, native: {} }, 'MANIFEST_INVALID'],
+      [
+        'unknown nested field',
+        { ...codecManifest, publisher: { ...codecManifest.publisher, website: 'https://attson.cn' } },
+        'MANIFEST_INVALID'
+      ],
       [
         'target',
         { ...codecManifest, target: { os: 'linux', arch: 'armv7' } },
