@@ -14,7 +14,7 @@ const privateKey = createPrivateKey({
     kty: 'OKP',
     crv: 'Ed25519',
     d: 'nWGxne_9WmZMRxVFkYgNRQYr9Wz17zqCxbHXh1QMjgA',
-    x: '11qYAYdk9JX8W0R1F-Xu2gf3yZB-wxpXFYOGG46xQ5s'
+    x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo'
   },
   format: 'jwk'
 });
