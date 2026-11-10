@@ -39,6 +39,8 @@ describe('plugin browser bridge', () => {
             appId: 'com.attson.codec',
             result: {
               apiVersion: '1.0',
+              sessionId: 'session-1',
+              correlationId: 'correlation-1',
               capabilities: ['host.theme.read'],
               metadata: { appId: 'com.attson.codec', name: 'AT Codec', version: '0.1.0' },
               theme: 'dark'
@@ -55,6 +57,8 @@ describe('plugin browser bridge', () => {
     const handshake = await client.handshake();
 
     assert.equal(handshake.theme, 'dark');
+    assert.equal(handshake.sessionId, 'session-1');
+    assert.equal(handshake.correlationId, 'correlation-1');
     assert.deepEqual(port.sent[0], {
       jsonrpc: '2.0',
       id: '1',
@@ -63,6 +67,38 @@ describe('plugin browser bridge', () => {
       method: 'host.handshake',
       params: {}
     });
+    client.close();
+  });
+
+  it('rejects a handshake without session correlation identity', async () => {
+    const port = new FakePort();
+    port.onSend = (message) => {
+      if ('id' in message) {
+        queueMicrotask(() =>
+          port.receive({
+            jsonrpc: '2.0',
+            id: message.id,
+            apiVersion: '1.0',
+            appId: 'com.attson.codec',
+            result: {
+              apiVersion: '1.0',
+              capabilities: [],
+              metadata: { appId: 'com.attson.codec', name: 'AT Codec', version: '0.1.0' },
+              theme: 'dark'
+            }
+          })
+        );
+      }
+    };
+    const client = createPluginClient(port, {
+      appId: 'com.attson.codec',
+      timeoutMs: 100
+    });
+
+    await assert.rejects(
+      client.handshake(),
+      (error) => error instanceof HostRpcError && error.code === 'HOST_HANDSHAKE_INVALID'
+    );
     client.close();
   });
 

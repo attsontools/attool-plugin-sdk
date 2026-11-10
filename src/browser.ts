@@ -49,6 +49,8 @@ export interface MessagePortLike {
 
 export interface HostHandshake {
   apiVersion: typeof HOST_API_VERSION;
+  sessionId: string;
+  correlationId: string;
   capabilities: string[];
   metadata: {
     appId: string;
@@ -225,7 +227,7 @@ export function createPluginClient(
   port.start();
 
   return {
-    handshake: () => call<HostHandshake>('host.handshake'),
+    handshake: async () => validateHandshake(await call<unknown>('host.handshake'), options.appId),
     call,
     onThemeChange(listener) {
       themeListeners.add(listener);
@@ -245,6 +247,32 @@ export function createPluginClient(
       themeListeners.clear();
     }
   };
+}
+
+function validateHandshake(value: unknown, appId: string): HostHandshake {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new HostRpcError('HOST_HANDSHAKE_INVALID', 'Host handshake response is invalid');
+  }
+  const handshake = value as Partial<HostHandshake>;
+  const metadata = handshake.metadata;
+  if (
+    handshake.apiVersion !== HOST_API_VERSION ||
+    typeof handshake.sessionId !== 'string' ||
+    handshake.sessionId.length === 0 ||
+    typeof handshake.correlationId !== 'string' ||
+    handshake.correlationId.length === 0 ||
+    !Array.isArray(handshake.capabilities) ||
+    handshake.capabilities.some((capability) => typeof capability !== 'string') ||
+    (handshake.theme !== 'dark' && handshake.theme !== 'light') ||
+    typeof metadata !== 'object' ||
+    metadata === null ||
+    metadata.appId !== appId ||
+    typeof metadata.name !== 'string' ||
+    typeof metadata.version !== 'string'
+  ) {
+    throw new HostRpcError('HOST_HANDSHAKE_INVALID', 'Host handshake response is invalid');
+  }
+  return handshake as HostHandshake;
 }
 
 export async function connectPlugin(
