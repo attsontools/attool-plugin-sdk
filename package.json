@@ -1,0 +1,17 @@
+{
+  "name": "@attson/plugin-sdk",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "packageManager": "pnpm@10.29.3"
+}
