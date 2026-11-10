@@ -9,12 +9,13 @@ import {
 } from '../src/index.ts';
 import { signTrustMetadata, verifyTrustMetadataSignature } from '../src/node.ts';
 
+const fixturePublicKey = 'pZQzAC2N9PEN86-KXe878Z5IKqzt3GPl91tmhDUR2B0';
 const privateKey = createPrivateKey({
   key: {
     kty: 'OKP',
     crv: 'Ed25519',
     d: 'nWGxne_9WmZMRxVFkYgNRQYr9Wz17zqCxbHXh1QMjgA',
-    x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo'
+    x: fixturePublicKey
   },
   format: 'jwk'
 });
@@ -27,7 +28,7 @@ const root = parseTrustRoot({
   expiresAt: '2027-11-10T00:00:00Z',
   catalogKeys: [{
     keyId: 'catalog-2026-01', algorithm: 'ed25519',
-    publicKey: 'ERERERERERERERERERERERERERERERERERERERERERE=', status: 'active',
+    publicKey: 'pZQzAC2N9PEN86+KXe878Z5IKqzt3GPl91tmhDUR2B0=', status: 'active',
     notBefore: '2026-11-01T00:00:00Z', notAfter: '2027-05-01T00:00:00Z'
   }],
   publishers: [{
@@ -78,13 +79,14 @@ describe('catalog trust metadata signatures', () => {
     const canonical = canonicalTrustMetadata(root);
     const signature = signTrustMetadata(root, privateKey);
 
+    assert.equal(createPublicKey(privateKey).export({ format: 'jwk' }).x, fixturePublicKey);
     assert.equal(
       canonical,
-      '{"catalogKeys":[{"algorithm":"ed25519","keyId":"catalog-2026-01","notAfter":"2027-05-01T00:00:00Z","notBefore":"2026-11-01T00:00:00Z","publicKey":"ERERERERERERERERERERERERERERERERERERERERERE=","status":"active"}],"expiresAt":"2027-11-10T00:00:00Z","issuedAt":"2026-11-10T00:00:00Z","publishers":[{"keys":[{"algorithm":"ed25519","keyId":"attson-codec-2026-01","notAfter":"2027-05-01T00:00:00Z","notBefore":"2026-11-01T00:00:00Z","publicKey":"IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=","status":"active"}],"name":"Attson","publisherId":"com.attson"}],"schemaVersion":1,"sequence":1}'
+      '{"catalogKeys":[{"algorithm":"ed25519","keyId":"catalog-2026-01","notAfter":"2027-05-01T00:00:00Z","notBefore":"2026-11-01T00:00:00Z","publicKey":"pZQzAC2N9PEN86+KXe878Z5IKqzt3GPl91tmhDUR2B0=","status":"active"}],"expiresAt":"2027-11-10T00:00:00Z","issuedAt":"2026-11-10T00:00:00Z","publishers":[{"keys":[{"algorithm":"ed25519","keyId":"attson-codec-2026-01","notAfter":"2027-05-01T00:00:00Z","notBefore":"2026-11-01T00:00:00Z","publicKey":"IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=","status":"active"}],"name":"Attson","publisherId":"com.attson"}],"schemaVersion":1,"sequence":1}'
     );
     assert.equal(
       signature,
-      '+2LIhnTBH9AV/TNhERqtVM6DVKd+dt1gPhUa9SydL9HgJJCPCtDnjZuyQDTMFNzjlPjq+F4qcf3BiJG3ZTmHDg=='
+      '6xr/t+I1UvVFB2q7vp2avUQPqX4cF6fqz1oIO/XhfPFuopggAbHWt2UOHXxTF73EWUI8+dcsxk9LZMxnj+pfAg=='
     );
     assert.equal(verifyTrustMetadataSignature(root, signature, publicKey), true);
     assert.equal(verifyTrustMetadataSignature({ ...root, sequence: 2 }, signature, publicKey), false);

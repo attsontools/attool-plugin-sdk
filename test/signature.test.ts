@@ -5,12 +5,13 @@ import { describe, it } from 'node:test';
 import { parseManifest } from '../src/index.ts';
 import { signManifest, verifyManifestSignature } from '../src/node.ts';
 
+const fixturePublicKey = 'pZQzAC2N9PEN86-KXe878Z5IKqzt3GPl91tmhDUR2B0';
 const privateKey = createPrivateKey({
   key: {
     kty: 'OKP',
     crv: 'Ed25519',
     d: 'nWGxne_9WmZMRxVFkYgNRQYr9Wz17zqCxbHXh1QMjgA',
-    x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo'
+    x: fixturePublicKey
   },
   format: 'jwk'
 });
@@ -36,6 +37,7 @@ describe('manifest signature', () => {
   it('verifies the canonical manifest and rejects a modified manifest', () => {
     const signature = signManifest(manifest, privateKey);
 
+    assert.equal(createPublicKey(privateKey).export({ format: 'jwk' }).x, fixturePublicKey);
     assert.equal(
       signature,
       'z9u457R/Jx9ya1MGaXziJpRAgP1RgMNaUM6pwlO+vPdJmlAK/5ejHqPpD+UjyUHjtbFYrYGfZQqeAPk+xEATCA=='
