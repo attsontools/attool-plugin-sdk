@@ -1,3 +1,5 @@
+import { canonicalJson } from './canonical.ts';
+
 export type PluginTargetOs = 'macos' | 'windows' | 'linux';
 export type PluginTargetArch = 'aarch64' | 'x86_64';
 
@@ -191,17 +193,8 @@ export function parseManifest(value: unknown): PluginManifest {
   return value as unknown as PluginManifest;
 }
 
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (!isRecord(value)) return value;
-
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, canonicalize(value[key])])
-  );
-}
-
 export function canonicalManifest(manifest: PluginManifest): string {
-  return JSON.stringify(canonicalize(manifest));
+  return canonicalJson(manifest);
 }
+
+export * from './catalog.ts';
