@@ -36,7 +36,10 @@ describe('manifest signature', () => {
   it('verifies the canonical manifest and rejects a modified manifest', () => {
     const signature = signManifest(manifest, privateKey);
 
-    assert.match(signature, /^[A-Za-z0-9+/]{86}==$/);
+    assert.equal(
+      signature,
+      'z9u457R/Jx9ya1MGaXziJpRAgP1RgMNaUM6pwlO+vPdJmlAK/5ejHqPpD+UjyUHjtbFYrYGfZQqeAPk+xEATCA=='
+    );
     assert.equal(verifyManifestSignature(manifest, signature, publicKey), true);
     assert.equal(
       verifyManifestSignature({ ...manifest, version: '0.1.1' }, signature, publicKey),
