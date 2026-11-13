@@ -321,4 +321,24 @@ describe('plugin catalog trust contract', () => {
         error.code === 'CATALOG_RELEASE_INVALID'
     );
   });
+
+  it('accepts template project Catalog permissions only on Host API 2.x', () => {
+    const templateCatalog = structuredClone(catalog);
+    templateCatalog.apps[0]!.appId = 'com.attson.template';
+    templateCatalog.apps[0]!.channels.stable.hostApi = { min: '2.0.0', max: '2.x' };
+    templateCatalog.apps[0]!.channels.stable.permissions = ['host.template.project'];
+
+    assert.deepEqual(
+      parsePluginCatalog(templateCatalog).apps[0]?.channels.stable.permissions,
+      ['host.template.project']
+    );
+
+    templateCatalog.apps[0]!.channels.stable.hostApi = { min: '1.0.0', max: '1.x' };
+    assert.throws(
+      () => parsePluginCatalog(templateCatalog),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
+    );
+  });
 });

@@ -198,7 +198,7 @@ function parseRelease(value, label) {
     }
     if (hostMajor !== '2' &&
         value.permissions.some((permission) => typeof permission === 'string' && CATALOG_NATIVE_SERVICE_PERMISSIONS.has(permission))) {
-        throw new CatalogValidationError('CATALOG_RELEASE_INVALID', `${label} HTTP permissions require Host API 2.x`);
+        throw new CatalogValidationError('CATALOG_RELEASE_INVALID', `${label} Native service permissions require Host API 2.x`);
     }
     const artifacts = value.artifacts.map((artifact, index) => parseArtifact(artifact, `${label}.artifacts[${index}]`));
     const targets = artifacts.map((artifact) => `${artifact.os}/${artifact.arch}`);

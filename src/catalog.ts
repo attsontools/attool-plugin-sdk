@@ -377,7 +377,7 @@ function parseRelease(value: unknown, label: string): CatalogRelease {
   ) {
     throw new CatalogValidationError(
       'CATALOG_RELEASE_INVALID',
-      `${label} HTTP permissions require Host API 2.x`
+      `${label} Native service permissions require Host API 2.x`
     );
   }
   const artifacts = value.artifacts.map((artifact, index) =>

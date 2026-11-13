@@ -73,6 +73,21 @@ const aria2Manifest = {
   }
 };
 
+const templateManifest = {
+  ...httpManifest,
+  appId: 'com.attson.template',
+  name: '主图模板',
+  permissions: ['host.theme.read', 'host.template.project'],
+  nativeService: {
+    ...httpManifest.nativeService,
+    entry: 'native/attemplate-service'
+  },
+  files: {
+    ...codecManifest.files,
+    'native/attemplate-service': 'c'.repeat(64)
+  }
+};
+
 describe('plugin manifest contract', () => {
   it('parses a valid manifest and produces deterministic signing bytes', () => {
     const manifest = parseManifest(codecManifest);
@@ -102,6 +117,25 @@ describe('plugin manifest contract', () => {
     for (const value of [
       { ...aria2Manifest, nativeService: undefined },
       { ...aria2Manifest, hostApi: codecManifest.hostApi }
+    ]) {
+      assert.throws(
+        () => parseManifest(value),
+        (error) =>
+          error instanceof ManifestValidationError &&
+          error.code === 'MANIFEST_NATIVE_SERVICE_REQUIRED'
+      );
+    }
+  });
+
+  it('accepts the template project capability only for Host API 2 native services', () => {
+    const manifest = parseManifest(templateManifest);
+
+    assert.deepEqual(manifest.permissions, ['host.theme.read', 'host.template.project']);
+    assert.equal(manifest.nativeService?.entry, 'native/attemplate-service');
+
+    for (const value of [
+      { ...templateManifest, nativeService: undefined },
+      { ...templateManifest, hostApi: codecManifest.hostApi }
     ]) {
       assert.throws(
         () => parseManifest(value),
