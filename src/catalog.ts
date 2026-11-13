@@ -1,4 +1,5 @@
 import { canonicalJson } from './canonical.ts';
+import { NATIVE_SERVICE_PERMISSIONS, PLUGIN_PERMISSIONS } from './permissions.ts';
 
 export type CatalogKeyStatus = 'active' | 'retired' | 'revoked';
 
@@ -45,7 +46,7 @@ export interface CatalogRelease {
   publisherKeyId: string;
   hostApi: {
     min: string;
-    max: '1.x';
+    max: '1.x' | '2.x';
   };
   permissions: string[];
   artifacts: CatalogArtifact[];
@@ -285,11 +286,8 @@ export function canVerifyWithCatalogKey(key: CatalogTrustKey, signedAt: string):
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 const APP_ID_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
-const CATALOG_PERMISSIONS = new Set([
-  'host.theme.read',
-  'host.file.save',
-  'host.notification.show'
-]);
+const CATALOG_PERMISSIONS = new Set<string>(PLUGIN_PERMISSIONS);
+const CATALOG_NATIVE_SERVICE_PERMISSIONS = new Set<string>(NATIVE_SERVICE_PERMISSIONS);
 
 function parseArtifact(value: unknown, label: string): CatalogArtifact {
   if (!isRecord(value)) {
@@ -352,10 +350,10 @@ function parseRelease(value: unknown, label: string): CatalogRelease {
   }
   timestamp(value.publishedAt, `${label}.publishedAt`, 'CATALOG_TIME_INVALID');
   requireExactFields(value.hostApi, ['min', 'max'], `${label}.hostApi`, 'CATALOG_RELEASE_INVALID');
-  if (
-    typeof value.hostApi.min !== 'string' || !/^1\.\d+\.\d+$/.test(value.hostApi.min) ||
-    value.hostApi.max !== '1.x'
-  ) {
+  const hostMajor = typeof value.hostApi.min === 'string'
+    ? /^([12])\.\d+\.\d+$/.exec(value.hostApi.min)?.[1]
+    : undefined;
+  if (!hostMajor || value.hostApi.max !== `${hostMajor}.x`) {
     throw new CatalogValidationError('CATALOG_RELEASE_INVALID', `${label}.hostApi is invalid`);
   }
   if (
@@ -370,6 +368,17 @@ function parseRelease(value: unknown, label: string): CatalogRelease {
   }
   if (new Set(value.permissions).size !== value.permissions.length) {
     throw new CatalogValidationError('CATALOG_RELEASE_INVALID', `${label} has duplicate permissions`);
+  }
+  if (
+    hostMajor !== '2' &&
+    value.permissions.some((permission) =>
+      typeof permission === 'string' && CATALOG_NATIVE_SERVICE_PERMISSIONS.has(permission)
+    )
+  ) {
+    throw new CatalogValidationError(
+      'CATALOG_RELEASE_INVALID',
+      `${label} HTTP permissions require Host API 2.x`
+    );
   }
   const artifacts = value.artifacts.map((artifact, index) =>
     parseArtifact(artifact, `${label}.artifacts[${index}]`)
