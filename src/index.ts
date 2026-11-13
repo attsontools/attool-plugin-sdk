@@ -1,4 +1,11 @@
 import { canonicalJson } from './canonical.ts';
+import { PLUGIN_PERMISSIONS } from './permissions.ts';
+
+export {
+  NATIVE_SERVICE_PERMISSIONS,
+  P0_PERMISSIONS,
+  PLUGIN_PERMISSIONS
+} from './permissions.ts';
 
 export type PluginTargetOs = 'macos' | 'windows' | 'linux';
 export type PluginTargetArch = 'aarch64' | 'x86_64';
@@ -25,6 +32,12 @@ export interface PluginManifest {
     entry: string;
   };
   permissions: string[];
+  nativeService?: {
+    entry: string;
+    version: string;
+    sha256: string;
+    protocolVersion: 1;
+  };
   files: Record<string, string>;
 }
 
@@ -39,7 +52,9 @@ export type ManifestErrorCode =
   | 'MANIFEST_ENTRY_MISSING'
   | 'MANIFEST_FILE_PATH_INVALID'
   | 'MANIFEST_FILE_HASH_INVALID'
-  | 'MANIFEST_PERMISSION_UNKNOWN';
+  | 'MANIFEST_PERMISSION_UNKNOWN'
+  | 'MANIFEST_NATIVE_SERVICE_INVALID'
+  | 'MANIFEST_NATIVE_SERVICE_REQUIRED';
 
 export class ManifestValidationError extends Error {
   readonly code: ManifestErrorCode;
@@ -50,12 +65,6 @@ export class ManifestValidationError extends Error {
     this.code = code;
   }
 }
-
-export const P0_PERMISSIONS = [
-  'host.theme.read',
-  'host.file.save',
-  'host.notification.show'
-] as const;
 
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
@@ -77,7 +86,7 @@ export function parseManifest(value: unknown): PluginManifest {
   }
   requireExactFields(
     value,
-    ['schemaVersion', 'appId', 'name', 'version', 'publisher', 'target', 'hostApi', 'ui', 'permissions', 'files'],
+    ['schemaVersion', 'appId', 'name', 'version', 'publisher', 'target', 'hostApi', 'ui', 'permissions', 'nativeService', 'files'],
     'manifest'
   );
   if (value.schemaVersion !== 1) {
@@ -125,24 +134,23 @@ export function parseManifest(value: unknown): PluginManifest {
   if (!isRecord(value.hostApi)) {
     throw new ManifestValidationError(
       'MANIFEST_HOST_API_UNSUPPORTED',
-      'Host API range must target major version 1'
+      'Host API range must target major version 1 or 2'
     );
   }
   requireExactFields(value.hostApi, ['min', 'max'], 'hostApi');
-  if (
-    typeof value.hostApi.min !== 'string' ||
-    !/^1\.\d+\.\d+$/.test(value.hostApi.min) ||
-    value.hostApi.max !== '1.x'
-  ) {
+  const hostMajor = typeof value.hostApi.min === 'string'
+    ? /^([12])\.\d+\.\d+$/.exec(value.hostApi.min)?.[1]
+    : undefined;
+  if (!hostMajor || value.hostApi.max !== `${hostMajor}.x`) {
     throw new ManifestValidationError(
       'MANIFEST_HOST_API_UNSUPPORTED',
-      'Host API range must target major version 1'
+      'Host API range must target major version 1 or 2'
     );
   }
   if (!Array.isArray(value.permissions)) {
     throw new ManifestValidationError('MANIFEST_INVALID', 'permissions must be an array');
   }
-  const knownPermissions = new Set<string>(P0_PERMISSIONS);
+  const knownPermissions = new Set<string>(PLUGIN_PERMISSIONS);
   if (
     value.permissions.some(
       (permission) => typeof permission !== 'string' || !knownPermissions.has(permission)
@@ -188,6 +196,48 @@ export function parseManifest(value: unknown): PluginManifest {
     throw new ManifestValidationError(
       'MANIFEST_ENTRY_MISSING',
       'UI entry must be declared in files'
+    );
+  }
+  const nativeService = value.nativeService;
+  if (nativeService !== undefined) {
+    if (!isRecord(nativeService)) {
+      throw new ManifestValidationError(
+        'MANIFEST_NATIVE_SERVICE_INVALID',
+        'Native service declaration is invalid'
+      );
+    }
+    requireExactFields(
+      nativeService,
+      ['entry', 'version', 'sha256', 'protocolVersion'],
+      'nativeService'
+    );
+    if (
+      typeof nativeService.entry !== 'string' ||
+      nativeService.entry.startsWith('/') ||
+      nativeService.entry.includes('\\') ||
+      nativeService.entry.split('/').some((part) => part === '' || part === '.' || part === '..') ||
+      nativeService.version !== value.version ||
+      typeof nativeService.sha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(nativeService.sha256) ||
+      value.files[nativeService.entry] !== nativeService.sha256 ||
+      nativeService.protocolVersion !== 1
+    ) {
+      throw new ManifestValidationError(
+        'MANIFEST_NATIVE_SERVICE_INVALID',
+        'Native service identity must match the signed package'
+      );
+    }
+  }
+  const requestsHttpHost = value.permissions.some((permission) =>
+    typeof permission === 'string' && permission.startsWith('host.http.')
+  );
+  if (
+    (hostMajor === '2') !== (nativeService !== undefined) ||
+    (requestsHttpHost && nativeService === undefined)
+  ) {
+    throw new ManifestValidationError(
+      'MANIFEST_NATIVE_SERVICE_REQUIRED',
+      'Native services and HTTP Host permissions require Host API 2.x'
     );
   }
   return value as unknown as PluginManifest;

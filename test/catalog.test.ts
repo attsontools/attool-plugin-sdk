@@ -89,6 +89,33 @@ const catalog = {
   ]
 };
 
+const httpCatalog = {
+  ...catalog,
+  apps: [
+    {
+      appId: 'com.attson.http',
+      name: 'HTTP 请求',
+      description: 'HTTP、SSE 与 WebSocket 调试',
+      publisherId: 'com.attson',
+      icon: 'http',
+      channels: {
+        stable: {
+          ...catalog.apps[0]!.channels.stable,
+          publisherKeyId: 'attson-http-2026-01',
+          hostApi: { min: '2.0.0', max: '2.x' },
+          permissions: [
+            'host.theme.read',
+            'host.file.save',
+            'host.http.request',
+            'host.http.stream',
+            'host.http.data'
+          ]
+        }
+      }
+    }
+  ]
+};
+
 describe('plugin catalog trust contract', () => {
   it('strictly parses a valid Root v1 document', () => {
     const parsed = parseTrustRoot(root);
@@ -241,6 +268,37 @@ describe('plugin catalog trust contract', () => {
     assert.throws(
       () => parsePluginCatalog(unsafeUrl),
       (error) => error instanceof CatalogValidationError && error.code === 'CATALOG_ARTIFACT_INVALID'
+    );
+  });
+
+  it('accepts Host API 2.x HTTP releases without changing Host API 1.x releases', () => {
+    const parsed = parsePluginCatalog(httpCatalog);
+
+    assert.equal(parsed.apps[0]?.channels.stable.hostApi.max, '2.x');
+    assert.deepEqual(
+      parsed.apps[0]?.channels.stable.permissions.slice(-3),
+      ['host.http.request', 'host.http.stream', 'host.http.data']
+    );
+    assert.equal(parsePluginCatalog(catalog).apps[0]?.channels.stable.hostApi.max, '1.x');
+  });
+
+  it('requires HTTP Catalog permissions to use Host API 2.x', () => {
+    const invalidHttpPermission = structuredClone(catalog);
+    invalidHttpPermission.apps[0]!.channels.stable.permissions = ['host.http.request'];
+    assert.throws(
+      () => parsePluginCatalog(invalidHttpPermission),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
+    );
+
+    const unsupportedMajor = structuredClone(httpCatalog);
+    unsupportedMajor.apps[0]!.channels.stable.hostApi = { min: '3.0.0', max: '3.x' };
+    assert.throws(
+      () => parsePluginCatalog(unsupportedMajor),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
     );
   });
 });
