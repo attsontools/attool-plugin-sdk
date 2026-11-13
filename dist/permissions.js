@@ -6,7 +6,8 @@ export const P0_PERMISSIONS = [
 export const NATIVE_SERVICE_PERMISSIONS = [
     'host.http.request',
     'host.http.stream',
-    'host.http.data'
+    'host.http.data',
+    'host.download.tasks'
 ];
 export const PLUGIN_PERMISSIONS = [
     ...P0_PERMISSIONS,

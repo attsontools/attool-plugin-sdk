@@ -58,6 +58,21 @@ const httpManifest = {
   }
 };
 
+const aria2Manifest = {
+  ...httpManifest,
+  appId: 'com.attson.aria2',
+  name: 'Aria2 下载',
+  permissions: ['host.theme.read', 'host.download.tasks'],
+  nativeService: {
+    ...httpManifest.nativeService,
+    entry: 'native/ataria2-service'
+  },
+  files: {
+    ...codecManifest.files,
+    'native/ataria2-service': 'c'.repeat(64)
+  }
+};
+
 describe('plugin manifest contract', () => {
   it('parses a valid manifest and produces deterministic signing bytes', () => {
     const manifest = parseManifest(codecManifest);
@@ -76,6 +91,25 @@ describe('plugin manifest contract', () => {
     assert.equal(manifest.nativeService?.entry, 'native/athttp-service');
     assert.equal(manifest.nativeService?.sha256, httpManifest.files['native/athttp-service']);
     assert.match(canonicalManifest(manifest), /"nativeService":\{"entry":"native\/athttp-service"/);
+  });
+
+  it('accepts the download task capability only for Host API 2 native services', () => {
+    const manifest = parseManifest(aria2Manifest);
+
+    assert.deepEqual(manifest.permissions, ['host.theme.read', 'host.download.tasks']);
+    assert.equal(manifest.nativeService?.entry, 'native/ataria2-service');
+
+    for (const value of [
+      { ...aria2Manifest, nativeService: undefined },
+      { ...aria2Manifest, hostApi: codecManifest.hostApi }
+    ]) {
+      assert.throws(
+        () => parseManifest(value),
+        (error) =>
+          error instanceof ManifestValidationError &&
+          error.code === 'MANIFEST_NATIVE_SERVICE_REQUIRED'
+      );
+    }
   });
 
   it('keeps Host API 1.x manifests canonical and rejects invalid native service contracts', () => {

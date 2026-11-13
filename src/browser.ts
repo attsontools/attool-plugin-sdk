@@ -1,10 +1,16 @@
 export const HOST_API_VERSION = '1.0' as const;
+export const NATIVE_SERVICE_HOST_API_VERSION = '2.0' as const;
 export const DEFAULT_MAX_MESSAGE_BYTES = 1024 * 1024;
+export const NATIVE_SERVICE_MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
+
+export type HostApiVersion =
+  | typeof HOST_API_VERSION
+  | typeof NATIVE_SERVICE_HOST_API_VERSION;
 
 export interface RpcRequest {
   jsonrpc: '2.0';
   id: string;
-  apiVersion: typeof HOST_API_VERSION;
+  apiVersion: HostApiVersion;
   appId: string;
   method: string;
   params: unknown;
@@ -12,7 +18,7 @@ export interface RpcRequest {
 
 export interface RpcNotification {
   jsonrpc: '2.0';
-  apiVersion: typeof HOST_API_VERSION;
+  apiVersion: HostApiVersion;
   appId: string;
   method: string;
   params: unknown;
@@ -21,7 +27,7 @@ export interface RpcNotification {
 export interface RpcSuccess {
   jsonrpc: '2.0';
   id: string;
-  apiVersion: typeof HOST_API_VERSION;
+  apiVersion: HostApiVersion;
   appId: string;
   result: unknown;
 }
@@ -29,7 +35,7 @@ export interface RpcSuccess {
 export interface RpcFailure {
   jsonrpc: '2.0';
   id: string;
-  apiVersion: typeof HOST_API_VERSION;
+  apiVersion: HostApiVersion;
   appId: string;
   error: {
     code: number;
@@ -48,7 +54,7 @@ export interface MessagePortLike {
 }
 
 export interface HostHandshake {
-  apiVersion: typeof HOST_API_VERSION;
+  apiVersion: HostApiVersion;
   sessionId: string;
   correlationId: string;
   capabilities: string[];
@@ -83,6 +89,7 @@ export interface PluginClient {
   handshake(): Promise<HostHandshake>;
   call<T>(method: string, params?: unknown, options?: { signal?: AbortSignal }): Promise<T>;
   onThemeChange(listener: (theme: 'dark' | 'light') => void): () => void;
+  onNotification(method: string, listener: (params: unknown) => void): () => void;
   close(): void;
 }
 
@@ -90,14 +97,20 @@ export function createPluginClient(
   port: MessagePortLike,
   options: {
     appId: string;
+    apiVersion?: HostApiVersion;
     timeoutMs?: number;
     maxMessageBytes?: number;
   }
 ): PluginClient {
+  const apiVersion = options.apiVersion ?? HOST_API_VERSION;
   const timeoutMs = options.timeoutMs ?? 10_000;
-  const maxMessageBytes = options.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES;
+  const maxMessageBytes = options.maxMessageBytes
+    ?? (apiVersion === NATIVE_SERVICE_HOST_API_VERSION
+      ? NATIVE_SERVICE_MAX_MESSAGE_BYTES
+      : DEFAULT_MAX_MESSAGE_BYTES);
   const pending = new Map<string, PendingRequest>();
   const themeListeners = new Set<(theme: 'dark' | 'light') => void>();
+  const notificationListeners = new Map<string, Set<(params: unknown) => void>>();
   let nextId = 1;
   let closed = false;
 
@@ -112,7 +125,7 @@ export function createPluginClient(
   function notify(method: string, params: unknown) {
     send({
       jsonrpc: '2.0',
-      apiVersion: HOST_API_VERSION,
+      apiVersion,
       appId: options.appId,
       method,
       params
@@ -164,7 +177,7 @@ export function createPluginClient(
         send({
           jsonrpc: '2.0',
           id,
-          apiVersion: HOST_API_VERSION,
+          apiVersion,
           appId: options.appId,
           method,
           params
@@ -193,7 +206,7 @@ export function createPluginClient(
     if (
       bytes > maxMessageBytes ||
       message.jsonrpc !== '2.0' ||
-      message.apiVersion !== HOST_API_VERSION ||
+      message.apiVersion !== apiVersion ||
       message.appId !== options.appId
     ) {
       return;
@@ -223,15 +236,33 @@ export function createPluginClient(
         for (const listener of themeListeners) listener(theme);
       }
     }
+    if ('method' in message) {
+      for (const listener of notificationListeners.get(message.method) ?? []) {
+        listener(message.params);
+      }
+    }
   };
   port.start();
 
   return {
-    handshake: async () => validateHandshake(await call<unknown>('host.handshake'), options.appId),
+    handshake: async () => validateHandshake(
+      await call<unknown>('host.handshake'),
+      options.appId,
+      apiVersion
+    ),
     call,
     onThemeChange(listener) {
       themeListeners.add(listener);
       return () => themeListeners.delete(listener);
+    },
+    onNotification(method, listener) {
+      const listeners = notificationListeners.get(method) ?? new Set<(params: unknown) => void>();
+      listeners.add(listener);
+      notificationListeners.set(method, listeners);
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) notificationListeners.delete(method);
+      };
     },
     close() {
       if (closed) return;
@@ -245,18 +276,23 @@ export function createPluginClient(
       }
       pending.clear();
       themeListeners.clear();
+      notificationListeners.clear();
     }
   };
 }
 
-function validateHandshake(value: unknown, appId: string): HostHandshake {
+function validateHandshake(
+  value: unknown,
+  appId: string,
+  apiVersion: HostApiVersion
+): HostHandshake {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new HostRpcError('HOST_HANDSHAKE_INVALID', 'Host handshake response is invalid');
   }
   const handshake = value as Partial<HostHandshake>;
   const metadata = handshake.metadata;
   if (
-    handshake.apiVersion !== HOST_API_VERSION ||
+    handshake.apiVersion !== apiVersion ||
     typeof handshake.sessionId !== 'string' ||
     handshake.sessionId.length === 0 ||
     typeof handshake.correlationId !== 'string' ||
@@ -278,12 +314,14 @@ function validateHandshake(value: unknown, appId: string): HostHandshake {
 export async function connectPlugin(
   appId: string,
   options: {
+    apiVersion?: HostApiVersion;
     timeoutMs?: number;
     maxMessageBytes?: number;
     targetWindow?: Window;
   } = {}
 ): Promise<PluginClient> {
   const targetWindow = options.targetWindow ?? window;
+  const apiVersion = options.apiVersion ?? HOST_API_VERSION;
   const timeoutMs = options.timeoutMs ?? 10_000;
   return new Promise<PluginClient>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -296,7 +334,7 @@ export async function connectPlugin(
         event.source !== targetWindow.parent ||
         data?.type !== 'attool:connect' ||
         data.appId !== appId ||
-        data.apiVersion !== HOST_API_VERSION ||
+        data.apiVersion !== apiVersion ||
         !event.ports[0]
       ) {
         return;
@@ -306,6 +344,7 @@ export async function connectPlugin(
       resolve(
         createPluginClient(event.ports[0], {
           appId,
+          apiVersion,
           timeoutMs,
           maxMessageBytes: options.maxMessageBytes
         })

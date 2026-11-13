@@ -1,5 +1,5 @@
 import { canonicalJson } from './canonical.ts';
-import { PLUGIN_PERMISSIONS } from './permissions.ts';
+import { NATIVE_SERVICE_PERMISSIONS, PLUGIN_PERMISSIONS } from './permissions.ts';
 
 export {
   NATIVE_SERVICE_PERMISSIONS,
@@ -228,16 +228,17 @@ export function parseManifest(value: unknown): PluginManifest {
       );
     }
   }
-  const requestsHttpHost = value.permissions.some((permission) =>
-    typeof permission === 'string' && permission.startsWith('host.http.')
+  const requestsNativeService = value.permissions.some((permission) =>
+    typeof permission === 'string' &&
+    (NATIVE_SERVICE_PERMISSIONS as readonly string[]).includes(permission)
   );
   if (
     (hostMajor === '2') !== (nativeService !== undefined) ||
-    (requestsHttpHost && nativeService === undefined)
+    (requestsNativeService && nativeService === undefined)
   ) {
     throw new ManifestValidationError(
       'MANIFEST_NATIVE_SERVICE_REQUIRED',
-      'Native services and HTTP Host permissions require Host API 2.x'
+      'Native services and their Host permissions require Host API 2.x'
     );
   }
   return value as unknown as PluginManifest;

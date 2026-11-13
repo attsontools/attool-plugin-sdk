@@ -27,6 +27,52 @@ class FakePort implements MessagePortLike {
 }
 
 describe('plugin browser bridge', () => {
+  it('connects with Host API 2 and delivers validated service notifications', async () => {
+    const port = new FakePort();
+    const events: unknown[] = [];
+    port.onSend = (message) => {
+      if ('id' in message && message.method === 'host.handshake') {
+        queueMicrotask(() => {
+          port.receive({
+            jsonrpc: '2.0',
+            id: message.id,
+            apiVersion: '2.0',
+            appId: 'com.attson.aria2',
+            result: {
+              apiVersion: '2.0',
+              sessionId: 'session-download',
+              correlationId: 'correlation-download',
+              capabilities: ['host.download.tasks'],
+              metadata: { appId: 'com.attson.aria2', name: 'Aria2 下载', version: '0.1.0' },
+              theme: 'dark'
+            }
+          });
+        });
+      }
+    };
+    const client = createPluginClient(port, {
+      appId: 'com.attson.aria2',
+      apiVersion: '2.0',
+      timeoutMs: 100
+    });
+    const remove = client.onNotification('host.download.taskEvent', (event) => events.push(event));
+
+    const handshake = await client.handshake();
+    port.receive({
+      jsonrpc: '2.0',
+      apiVersion: '2.0',
+      appId: 'com.attson.aria2',
+      method: 'host.download.taskEvent',
+      params: { id: 'dl-1', status: 'running', progress: 25 }
+    });
+
+    assert.equal(handshake.apiVersion, '2.0');
+    assert.equal(port.sent[0]?.apiVersion, '2.0');
+    assert.deepEqual(events, [{ id: 'dl-1', status: 'running', progress: 25 }]);
+    remove();
+    client.close();
+  });
+
   it('handshakes with a versioned app-scoped JSON-RPC request', async () => {
     const port = new FakePort();
     port.onSend = (message) => {

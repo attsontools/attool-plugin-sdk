@@ -1,5 +1,7 @@
 export const HOST_API_VERSION = '1.0';
+export const NATIVE_SERVICE_HOST_API_VERSION = '2.0';
 export const DEFAULT_MAX_MESSAGE_BYTES = 1024 * 1024;
+export const NATIVE_SERVICE_MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
 export class HostRpcError extends Error {
     code;
     rpcCode;
@@ -11,10 +13,15 @@ export class HostRpcError extends Error {
     }
 }
 export function createPluginClient(port, options) {
+    const apiVersion = options.apiVersion ?? HOST_API_VERSION;
     const timeoutMs = options.timeoutMs ?? 10_000;
-    const maxMessageBytes = options.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES;
+    const maxMessageBytes = options.maxMessageBytes
+        ?? (apiVersion === NATIVE_SERVICE_HOST_API_VERSION
+            ? NATIVE_SERVICE_MAX_MESSAGE_BYTES
+            : DEFAULT_MAX_MESSAGE_BYTES);
     const pending = new Map();
     const themeListeners = new Set();
+    const notificationListeners = new Map();
     let nextId = 1;
     let closed = false;
     function send(message) {
@@ -27,7 +34,7 @@ export function createPluginClient(port, options) {
     function notify(method, params) {
         send({
             jsonrpc: '2.0',
-            apiVersion: HOST_API_VERSION,
+            apiVersion,
             appId: options.appId,
             method,
             params
@@ -73,7 +80,7 @@ export function createPluginClient(port, options) {
                 send({
                     jsonrpc: '2.0',
                     id,
-                    apiVersion: HOST_API_VERSION,
+                    apiVersion,
                     appId: options.appId,
                     method,
                     params
@@ -100,7 +107,7 @@ export function createPluginClient(port, options) {
         }
         if (bytes > maxMessageBytes ||
             message.jsonrpc !== '2.0' ||
-            message.apiVersion !== HOST_API_VERSION ||
+            message.apiVersion !== apiVersion ||
             message.appId !== options.appId) {
             return;
         }
@@ -126,14 +133,29 @@ export function createPluginClient(port, options) {
                     listener(theme);
             }
         }
+        if ('method' in message) {
+            for (const listener of notificationListeners.get(message.method) ?? []) {
+                listener(message.params);
+            }
+        }
     };
     port.start();
     return {
-        handshake: async () => validateHandshake(await call('host.handshake'), options.appId),
+        handshake: async () => validateHandshake(await call('host.handshake'), options.appId, apiVersion),
         call,
         onThemeChange(listener) {
             themeListeners.add(listener);
             return () => themeListeners.delete(listener);
+        },
+        onNotification(method, listener) {
+            const listeners = notificationListeners.get(method) ?? new Set();
+            listeners.add(listener);
+            notificationListeners.set(method, listeners);
+            return () => {
+                listeners.delete(listener);
+                if (listeners.size === 0)
+                    notificationListeners.delete(method);
+            };
         },
         close() {
             if (closed)
@@ -148,16 +170,17 @@ export function createPluginClient(port, options) {
             }
             pending.clear();
             themeListeners.clear();
+            notificationListeners.clear();
         }
     };
 }
-function validateHandshake(value, appId) {
+function validateHandshake(value, appId, apiVersion) {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         throw new HostRpcError('HOST_HANDSHAKE_INVALID', 'Host handshake response is invalid');
     }
     const handshake = value;
     const metadata = handshake.metadata;
-    if (handshake.apiVersion !== HOST_API_VERSION ||
+    if (handshake.apiVersion !== apiVersion ||
         typeof handshake.sessionId !== 'string' ||
         handshake.sessionId.length === 0 ||
         typeof handshake.correlationId !== 'string' ||
@@ -176,6 +199,7 @@ function validateHandshake(value, appId) {
 }
 export async function connectPlugin(appId, options = {}) {
     const targetWindow = options.targetWindow ?? window;
+    const apiVersion = options.apiVersion ?? HOST_API_VERSION;
     const timeoutMs = options.timeoutMs ?? 10_000;
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
@@ -187,7 +211,7 @@ export async function connectPlugin(appId, options = {}) {
             if (event.source !== targetWindow.parent ||
                 data?.type !== 'attool:connect' ||
                 data.appId !== appId ||
-                data.apiVersion !== HOST_API_VERSION ||
+                data.apiVersion !== apiVersion ||
                 !event.ports[0]) {
                 return;
             }
@@ -195,6 +219,7 @@ export async function connectPlugin(appId, options = {}) {
             targetWindow.removeEventListener('message', onMessage);
             resolve(createPluginClient(event.ports[0], {
                 appId,
+                apiVersion,
                 timeoutMs,
                 maxMessageBytes: options.maxMessageBytes
             }));

@@ -1,5 +1,5 @@
 import { canonicalJson } from "./canonical.js";
-import { PLUGIN_PERMISSIONS } from "./permissions.js";
+import { NATIVE_SERVICE_PERMISSIONS, PLUGIN_PERMISSIONS } from "./permissions.js";
 export { NATIVE_SERVICE_PERMISSIONS, P0_PERMISSIONS, PLUGIN_PERMISSIONS } from "./permissions.js";
 export class ManifestValidationError extends Error {
     code;
@@ -114,10 +114,11 @@ export function parseManifest(value) {
             throw new ManifestValidationError('MANIFEST_NATIVE_SERVICE_INVALID', 'Native service identity must match the signed package');
         }
     }
-    const requestsHttpHost = value.permissions.some((permission) => typeof permission === 'string' && permission.startsWith('host.http.'));
+    const requestsNativeService = value.permissions.some((permission) => typeof permission === 'string' &&
+        NATIVE_SERVICE_PERMISSIONS.includes(permission));
     if ((hostMajor === '2') !== (nativeService !== undefined) ||
-        (requestsHttpHost && nativeService === undefined)) {
-        throw new ManifestValidationError('MANIFEST_NATIVE_SERVICE_REQUIRED', 'Native services and HTTP Host permissions require Host API 2.x');
+        (requestsNativeService && nativeService === undefined)) {
+        throw new ManifestValidationError('MANIFEST_NATIVE_SERVICE_REQUIRED', 'Native services and their Host permissions require Host API 2.x');
     }
     return value;
 }
