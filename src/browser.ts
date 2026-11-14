@@ -66,6 +66,20 @@ export interface HostHandshake {
   theme: 'dark' | 'light';
 }
 
+export interface HostUiOpenRequest {
+  windowId: string;
+  payload?: unknown;
+}
+
+export interface HostUiActivatedNotification {
+  windowId: string;
+  payload?: unknown;
+}
+
+export interface HostUiCloseResult {
+  closed: true;
+}
+
 export class HostRpcError extends Error {
   readonly code: string;
   readonly rpcCode?: number;

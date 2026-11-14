@@ -1,6 +1,11 @@
 export { NATIVE_SERVICE_PERMISSIONS, P0_PERMISSIONS, PLUGIN_PERMISSIONS } from './permissions.ts';
 export type PluginTargetOs = 'macos' | 'windows' | 'linux';
 export type PluginTargetArch = 'aarch64' | 'x86_64';
+export type PluginAuxiliaryWindowPresentation = 'bottomPanel' | 'centeredDialog';
+export interface PluginAuxiliaryWindow {
+    entry: string;
+    presentation: PluginAuxiliaryWindowPresentation;
+}
 export interface PluginManifest {
     schemaVersion: 1;
     appId: string;
@@ -21,6 +26,7 @@ export interface PluginManifest {
     };
     ui: {
         entry: string;
+        windows?: Record<string, PluginAuxiliaryWindow>;
     };
     permissions: string[];
     nativeService?: {
@@ -28,10 +34,11 @@ export interface PluginManifest {
         version: string;
         sha256: string;
         protocolVersion: 1;
+        lifecycle?: 'onDemand' | 'background';
     };
     files: Record<string, string>;
 }
-export type ManifestErrorCode = 'MANIFEST_INVALID' | 'MANIFEST_SCHEMA_UNSUPPORTED' | 'MANIFEST_APP_ID_INVALID' | 'MANIFEST_VERSION_INVALID' | 'MANIFEST_PUBLISHER_INVALID' | 'MANIFEST_TARGET_INVALID' | 'MANIFEST_HOST_API_UNSUPPORTED' | 'MANIFEST_ENTRY_MISSING' | 'MANIFEST_FILE_PATH_INVALID' | 'MANIFEST_FILE_HASH_INVALID' | 'MANIFEST_PERMISSION_UNKNOWN' | 'MANIFEST_NATIVE_SERVICE_INVALID' | 'MANIFEST_NATIVE_SERVICE_REQUIRED';
+export type ManifestErrorCode = 'MANIFEST_INVALID' | 'MANIFEST_SCHEMA_UNSUPPORTED' | 'MANIFEST_APP_ID_INVALID' | 'MANIFEST_VERSION_INVALID' | 'MANIFEST_PUBLISHER_INVALID' | 'MANIFEST_TARGET_INVALID' | 'MANIFEST_HOST_API_UNSUPPORTED' | 'MANIFEST_ENTRY_MISSING' | 'MANIFEST_UI_WINDOW_INVALID' | 'MANIFEST_FILE_PATH_INVALID' | 'MANIFEST_FILE_HASH_INVALID' | 'MANIFEST_PERMISSION_UNKNOWN' | 'MANIFEST_NATIVE_SERVICE_INVALID' | 'MANIFEST_NATIVE_SERVICE_REQUIRED';
 export declare class ManifestValidationError extends Error {
     readonly code: ManifestErrorCode;
     constructor(code: ManifestErrorCode, message: string);

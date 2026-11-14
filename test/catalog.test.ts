@@ -341,4 +341,27 @@ describe('plugin catalog trust contract', () => {
         error.code === 'CATALOG_RELEASE_INVALID'
     );
   });
+
+  it('accepts clipboard Catalog permissions only on Host API 2.x', () => {
+    const clipboardCatalog = structuredClone(catalog);
+    clipboardCatalog.apps[0]!.appId = 'com.attson.clipboard';
+    clipboardCatalog.apps[0]!.channels.stable.hostApi = { min: '2.0.0', max: '2.x' };
+    clipboardCatalog.apps[0]!.channels.stable.permissions = [
+      'host.ui.auxiliary',
+      'host.clipboard.history'
+    ];
+
+    assert.deepEqual(
+      parsePluginCatalog(clipboardCatalog).apps[0]?.channels.stable.permissions,
+      ['host.ui.auxiliary', 'host.clipboard.history']
+    );
+
+    clipboardCatalog.apps[0]!.channels.stable.hostApi = { min: '1.0.0', max: '1.x' };
+    assert.throws(
+      () => parsePluginCatalog(clipboardCatalog),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
+    );
+  });
 });

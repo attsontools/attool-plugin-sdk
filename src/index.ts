@@ -9,6 +9,12 @@ export {
 
 export type PluginTargetOs = 'macos' | 'windows' | 'linux';
 export type PluginTargetArch = 'aarch64' | 'x86_64';
+export type PluginAuxiliaryWindowPresentation = 'bottomPanel' | 'centeredDialog';
+
+export interface PluginAuxiliaryWindow {
+  entry: string;
+  presentation: PluginAuxiliaryWindowPresentation;
+}
 
 export interface PluginManifest {
   schemaVersion: 1;
@@ -30,6 +36,7 @@ export interface PluginManifest {
   };
   ui: {
     entry: string;
+    windows?: Record<string, PluginAuxiliaryWindow>;
   };
   permissions: string[];
   nativeService?: {
@@ -37,6 +44,7 @@ export interface PluginManifest {
     version: string;
     sha256: string;
     protocolVersion: 1;
+    lifecycle?: 'onDemand' | 'background';
   };
   files: Record<string, string>;
 }
@@ -50,6 +58,7 @@ export type ManifestErrorCode =
   | 'MANIFEST_TARGET_INVALID'
   | 'MANIFEST_HOST_API_UNSUPPORTED'
   | 'MANIFEST_ENTRY_MISSING'
+  | 'MANIFEST_UI_WINDOW_INVALID'
   | 'MANIFEST_FILE_PATH_INVALID'
   | 'MANIFEST_FILE_HASH_INVALID'
   | 'MANIFEST_PERMISSION_UNKNOWN'
@@ -188,7 +197,7 @@ export function parseManifest(value: unknown): PluginManifest {
       'UI entry must be declared in files'
     );
   }
-  requireExactFields(value.ui, ['entry'], 'ui');
+  requireExactFields(value.ui, ['entry', 'windows'], 'ui');
   if (
     typeof value.ui.entry !== 'string' ||
     !(value.ui.entry in value.files)
@@ -197,6 +206,42 @@ export function parseManifest(value: unknown): PluginManifest {
       'MANIFEST_ENTRY_MISSING',
       'UI entry must be declared in files'
     );
+  }
+  if (value.ui.windows !== undefined) {
+    if (!isRecord(value.ui.windows)) {
+      throw new ManifestValidationError(
+        'MANIFEST_UI_WINDOW_INVALID',
+        'Auxiliary windows must be an object'
+      );
+    }
+    const windows = Object.entries(value.ui.windows);
+    if (windows.length > 4) {
+      throw new ManifestValidationError(
+        'MANIFEST_UI_WINDOW_INVALID',
+        'Manifest must declare no more than four auxiliary windows'
+      );
+    }
+    for (const [windowId, window] of windows) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(windowId) || !isRecord(window)) {
+        throw new ManifestValidationError(
+          'MANIFEST_UI_WINDOW_INVALID',
+          `Invalid auxiliary window: ${windowId}`
+        );
+      }
+      requireExactFields(window, ['entry', 'presentation'], `ui.windows.${windowId}`);
+      const entryDeclared = typeof window.entry === 'string' && window.entry in value.files;
+      if (
+        !entryDeclared ||
+        (window.presentation !== 'bottomPanel' && window.presentation !== 'centeredDialog')
+      ) {
+        throw new ManifestValidationError(
+          entryDeclared
+            ? 'MANIFEST_UI_WINDOW_INVALID'
+            : 'MANIFEST_ENTRY_MISSING',
+          `Auxiliary window ${windowId} must use a signed entry and supported presentation`
+        );
+      }
+    }
   }
   const nativeService = value.nativeService;
   if (nativeService !== undefined) {
@@ -208,7 +253,7 @@ export function parseManifest(value: unknown): PluginManifest {
     }
     requireExactFields(
       nativeService,
-      ['entry', 'version', 'sha256', 'protocolVersion'],
+      ['entry', 'version', 'sha256', 'protocolVersion', 'lifecycle'],
       'nativeService'
     );
     if (
@@ -220,7 +265,10 @@ export function parseManifest(value: unknown): PluginManifest {
       typeof nativeService.sha256 !== 'string' ||
       !/^[a-f0-9]{64}$/.test(nativeService.sha256) ||
       value.files[nativeService.entry] !== nativeService.sha256 ||
-      nativeService.protocolVersion !== 1
+      nativeService.protocolVersion !== 1 ||
+      (nativeService.lifecycle !== undefined &&
+        nativeService.lifecycle !== 'onDemand' &&
+        nativeService.lifecycle !== 'background')
     ) {
       throw new ManifestValidationError(
         'MANIFEST_NATIVE_SERVICE_INVALID',
@@ -234,7 +282,8 @@ export function parseManifest(value: unknown): PluginManifest {
   );
   if (
     (hostMajor === '2') !== (nativeService !== undefined) ||
-    (requestsNativeService && nativeService === undefined)
+    (requestsNativeService && nativeService === undefined) ||
+    (nativeService?.lifecycle === 'background' && !requestsNativeService)
   ) {
     throw new ManifestValidationError(
       'MANIFEST_NATIVE_SERVICE_REQUIRED',

@@ -88,6 +88,31 @@ const templateManifest = {
   }
 };
 
+const clipboardManifest = {
+  ...httpManifest,
+  appId: 'com.attson.clipboard',
+  name: '剪贴板',
+  ui: {
+    entry: 'ui/index.html',
+    windows: {
+      history: { entry: 'ui/history.html', presentation: 'bottomPanel' },
+      preview: { entry: 'ui/preview.html', presentation: 'centeredDialog' }
+    }
+  },
+  permissions: ['host.theme.read', 'host.ui.auxiliary', 'host.clipboard.history'],
+  nativeService: {
+    ...httpManifest.nativeService,
+    entry: 'native/atclipboard-service',
+    lifecycle: 'background'
+  },
+  files: {
+    ...codecManifest.files,
+    'ui/history.html': 'd'.repeat(64),
+    'ui/preview.html': 'e'.repeat(64),
+    'native/atclipboard-service': 'c'.repeat(64)
+  }
+};
+
 describe('plugin manifest contract', () => {
   it('parses a valid manifest and produces deterministic signing bytes', () => {
     const manifest = parseManifest(codecManifest);
@@ -142,6 +167,116 @@ describe('plugin manifest contract', () => {
         (error) =>
           error instanceof ManifestValidationError &&
           error.code === 'MANIFEST_NATIVE_SERVICE_REQUIRED'
+      );
+    }
+  });
+
+  it('accepts a background clipboard service with signed auxiliary windows', () => {
+    const manifest = parseManifest(clipboardManifest);
+
+    assert.equal(manifest.nativeService?.lifecycle, 'background');
+    assert.deepEqual(manifest.ui.windows, {
+      history: { entry: 'ui/history.html', presentation: 'bottomPanel' },
+      preview: { entry: 'ui/preview.html', presentation: 'centeredDialog' }
+    });
+    assert.deepEqual(manifest.permissions, [
+      'host.theme.read',
+      'host.ui.auxiliary',
+      'host.clipboard.history'
+    ]);
+  });
+
+  it('accepts an explicitly empty auxiliary window map like the host', () => {
+    const manifest = parseManifest({
+      ...codecManifest,
+      ui: { ...codecManifest.ui, windows: {} }
+    });
+
+    assert.deepEqual(manifest.ui.windows, {});
+  });
+
+  it('rejects invalid background lifecycle and auxiliary window declarations', () => {
+    const invalidCases: Array<[string, unknown, string]> = [
+      [
+        'unknown lifecycle',
+        {
+          ...clipboardManifest,
+          nativeService: { ...clipboardManifest.nativeService, lifecycle: 'always' }
+        },
+        'MANIFEST_NATIVE_SERVICE_INVALID'
+      ],
+      [
+        'background without a native service permission',
+        { ...clipboardManifest, permissions: ['host.theme.read', 'host.ui.auxiliary'] },
+        'MANIFEST_NATIVE_SERVICE_REQUIRED'
+      ],
+      [
+        'unsafe window id',
+        {
+          ...clipboardManifest,
+          ui: {
+            ...clipboardManifest.ui,
+            windows: { '../history': clipboardManifest.ui.windows.history }
+          }
+        },
+        'MANIFEST_UI_WINDOW_INVALID'
+      ],
+      [
+        'unsigned window entry',
+        {
+          ...clipboardManifest,
+          ui: {
+            ...clipboardManifest.ui,
+            windows: {
+              ...clipboardManifest.ui.windows,
+              history: { entry: 'ui/missing.html', presentation: 'bottomPanel' }
+            }
+          }
+        },
+        'MANIFEST_ENTRY_MISSING'
+      ],
+      [
+        'unknown window presentation',
+        {
+          ...clipboardManifest,
+          ui: {
+            ...clipboardManifest.ui,
+            windows: {
+              ...clipboardManifest.ui.windows,
+              history: { entry: 'ui/history.html', presentation: 'floating' }
+            }
+          }
+        },
+        'MANIFEST_UI_WINDOW_INVALID'
+      ],
+      [
+        'too many windows',
+        {
+          ...clipboardManifest,
+          ui: {
+            ...clipboardManifest.ui,
+            windows: Object.fromEntries(
+              Array.from({ length: 5 }, (_, index) => [
+                `window-${index}`,
+                clipboardManifest.ui.windows.history
+              ])
+            )
+          }
+        },
+        'MANIFEST_UI_WINDOW_INVALID'
+      ],
+      [
+        'clipboard permission on Host API 1',
+        { ...clipboardManifest, hostApi: codecManifest.hostApi },
+        'MANIFEST_NATIVE_SERVICE_REQUIRED'
+      ]
+    ];
+
+    for (const [label, value, code] of invalidCases) {
+      assert.throws(
+        () => parseManifest(value),
+        (error) => error instanceof ManifestValidationError && error.code === code,
+        label
       );
     }
   });
