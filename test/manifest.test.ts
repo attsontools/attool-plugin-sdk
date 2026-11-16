@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { canonicalManifest, ManifestValidationError, parseManifest } from '../src/index.ts';
+import {
+  NATIVE_SERVICE_PERMISSIONS,
+  P0_PERMISSIONS,
+  canonicalManifest,
+  ManifestValidationError,
+  parseManifest
+} from '../src/index.ts';
 
 const codecManifest = {
   schemaVersion: 1,
@@ -88,6 +94,27 @@ const templateManifest = {
   }
 };
 
+const videoManifest = {
+  ...httpManifest,
+  appId: 'com.attson.video',
+  name: '视频链接抽取',
+  permissions: [
+    'host.theme.read',
+    'host.app.activate',
+    'host.clipboard.write',
+    'host.external.open',
+    'host.video.extract'
+  ],
+  nativeService: {
+    ...httpManifest.nativeService,
+    entry: 'native/atvideo-service'
+  },
+  files: {
+    ...codecManifest.files,
+    'native/atvideo-service': 'c'.repeat(64)
+  }
+};
+
 const clipboardManifest = {
   ...httpManifest,
   appId: 'com.attson.clipboard',
@@ -161,6 +188,28 @@ describe('plugin manifest contract', () => {
     for (const value of [
       { ...templateManifest, nativeService: undefined },
       { ...templateManifest, hostApi: codecManifest.hostApi }
+    ]) {
+      assert.throws(
+        () => parseManifest(value),
+        (error) =>
+          error instanceof ManifestValidationError &&
+          error.code === 'MANIFEST_NATIVE_SERVICE_REQUIRED'
+      );
+    }
+  });
+
+  it('classifies app utilities separately from the video native service capability', () => {
+    assert.ok(P0_PERMISSIONS.includes('host.app.activate'));
+    assert.ok(P0_PERMISSIONS.includes('host.clipboard.write'));
+    assert.ok(P0_PERMISSIONS.includes('host.external.open'));
+    assert.ok(NATIVE_SERVICE_PERMISSIONS.includes('host.video.extract'));
+
+    const manifest = parseManifest(videoManifest);
+    assert.deepEqual(manifest.permissions, videoManifest.permissions);
+
+    for (const value of [
+      { ...videoManifest, nativeService: undefined },
+      { ...videoManifest, hostApi: codecManifest.hostApi }
     ]) {
       assert.throws(
         () => parseManifest(value),

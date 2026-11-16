@@ -69,6 +69,19 @@ export interface HostUiActivatedNotification {
 export interface HostUiCloseResult {
     closed: true;
 }
+export interface HostAppActivateRequest {
+    appId: string;
+    payload?: unknown;
+}
+export interface HostAppActivateResult {
+    accepted: true;
+    activationId: string;
+}
+export interface HostAppActivatedNotification {
+    activationId: string;
+    sourceAppId: string;
+    payload?: unknown;
+}
 export declare class HostRpcError extends Error {
     readonly code: string;
     readonly rpcCode?: number;

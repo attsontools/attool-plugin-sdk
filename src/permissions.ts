@@ -2,7 +2,10 @@ export const P0_PERMISSIONS = [
   'host.theme.read',
   'host.file.save',
   'host.notification.show',
-  'host.ui.auxiliary'
+  'host.ui.auxiliary',
+  'host.app.activate',
+  'host.clipboard.write',
+  'host.external.open'
 ] as const;
 
 export const NATIVE_SERVICE_PERMISSIONS = [
@@ -11,7 +14,8 @@ export const NATIVE_SERVICE_PERMISSIONS = [
   'host.http.data',
   'host.download.tasks',
   'host.template.project',
-  'host.clipboard.history'
+  'host.clipboard.history',
+  'host.video.extract'
 ] as const;
 
 export const PLUGIN_PERMISSIONS = [

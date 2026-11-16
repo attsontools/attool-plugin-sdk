@@ -97,10 +97,14 @@ describe('installed package consumption', () => {
       join(consumerRoot, 'consumer.ts'),
       [
         "import { parseManifest, type PluginManifest } from '@attson/plugin-sdk';",
-        "import { createPluginClient } from '@attson/plugin-sdk/browser';",
+        "import { createPluginClient, type HostAppActivateRequest, type HostAppActivatedNotification, type HostAppActivateResult } from '@attson/plugin-sdk/browser';",
         "import { signManifest } from '@attson/plugin-sdk/node';",
         'const parser: (value: unknown) => PluginManifest = parseManifest;',
+        "const activate: HostAppActivateRequest = { appId: 'com.attson.aria2', payload: { version: 1, kind: 'download.urls', urls: ['https://example.com/a.mp4'] } };",
+        "const activated: HostAppActivatedNotification = { activationId: 'activation-1', sourceAppId: 'com.attson.video', payload: activate.payload };",
+        "const accepted: HostAppActivateResult = { accepted: true, activationId: activated.activationId };",
         'void parser;',
+        'void accepted;',
         'void createPluginClient;',
         'void signManifest;'
       ].join('\n')
