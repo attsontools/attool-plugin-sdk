@@ -364,4 +364,34 @@ describe('plugin catalog trust contract', () => {
         error.code === 'CATALOG_RELEASE_INVALID'
     );
   });
+
+  it('classifies app utility and video extraction Catalog permissions by Host API major', () => {
+    const appUtilityCatalog = structuredClone(catalog);
+    appUtilityCatalog.apps[0]!.channels.stable.permissions = [
+      'host.app.activate',
+      'host.clipboard.write',
+      'host.external.open'
+    ];
+    assert.deepEqual(
+      parsePluginCatalog(appUtilityCatalog).apps[0]?.channels.stable.permissions,
+      ['host.app.activate', 'host.clipboard.write', 'host.external.open']
+    );
+
+    const videoCatalog = structuredClone(catalog);
+    videoCatalog.apps[0]!.appId = 'com.attson.video';
+    videoCatalog.apps[0]!.channels.stable.hostApi = { min: '2.0.0', max: '2.x' };
+    videoCatalog.apps[0]!.channels.stable.permissions = ['host.video.extract'];
+    assert.deepEqual(
+      parsePluginCatalog(videoCatalog).apps[0]?.channels.stable.permissions,
+      ['host.video.extract']
+    );
+
+    videoCatalog.apps[0]!.channels.stable.hostApi = { min: '1.0.0', max: '1.x' };
+    assert.throws(
+      () => parsePluginCatalog(videoCatalog),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
+    );
+  });
 });
