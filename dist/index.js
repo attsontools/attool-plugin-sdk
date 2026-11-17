@@ -1,5 +1,5 @@
 import { canonicalJson } from "./canonical.js";
-import { PLUGIN_PERMISSIONS } from "./permissions.js";
+import { NATIVE_SERVICE_PERMISSIONS, PLUGIN_PERMISSIONS } from "./permissions.js";
 export { NATIVE_SERVICE_PERMISSIONS, P0_PERMISSIONS, PLUGIN_PERMISSIONS } from "./permissions.js";
 export class ManifestValidationError extends Error {
     code;
@@ -91,17 +91,39 @@ export function parseManifest(value) {
     if (!isRecord(value.ui)) {
         throw new ManifestValidationError('MANIFEST_ENTRY_MISSING', 'UI entry must be declared in files');
     }
-    requireExactFields(value.ui, ['entry'], 'ui');
+    requireExactFields(value.ui, ['entry', 'windows'], 'ui');
     if (typeof value.ui.entry !== 'string' ||
         !(value.ui.entry in value.files)) {
         throw new ManifestValidationError('MANIFEST_ENTRY_MISSING', 'UI entry must be declared in files');
+    }
+    if (value.ui.windows !== undefined) {
+        if (!isRecord(value.ui.windows)) {
+            throw new ManifestValidationError('MANIFEST_UI_WINDOW_INVALID', 'Auxiliary windows must be an object');
+        }
+        const windows = Object.entries(value.ui.windows);
+        if (windows.length > 4) {
+            throw new ManifestValidationError('MANIFEST_UI_WINDOW_INVALID', 'Manifest must declare no more than four auxiliary windows');
+        }
+        for (const [windowId, window] of windows) {
+            if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(windowId) || !isRecord(window)) {
+                throw new ManifestValidationError('MANIFEST_UI_WINDOW_INVALID', `Invalid auxiliary window: ${windowId}`);
+            }
+            requireExactFields(window, ['entry', 'presentation'], `ui.windows.${windowId}`);
+            const entryDeclared = typeof window.entry === 'string' && window.entry in value.files;
+            if (!entryDeclared ||
+                (window.presentation !== 'bottomPanel' && window.presentation !== 'centeredDialog')) {
+                throw new ManifestValidationError(entryDeclared
+                    ? 'MANIFEST_UI_WINDOW_INVALID'
+                    : 'MANIFEST_ENTRY_MISSING', `Auxiliary window ${windowId} must use a signed entry and supported presentation`);
+            }
+        }
     }
     const nativeService = value.nativeService;
     if (nativeService !== undefined) {
         if (!isRecord(nativeService)) {
             throw new ManifestValidationError('MANIFEST_NATIVE_SERVICE_INVALID', 'Native service declaration is invalid');
         }
-        requireExactFields(nativeService, ['entry', 'version', 'sha256', 'protocolVersion'], 'nativeService');
+        requireExactFields(nativeService, ['entry', 'version', 'sha256', 'protocolVersion', 'lifecycle'], 'nativeService');
         if (typeof nativeService.entry !== 'string' ||
             nativeService.entry.startsWith('/') ||
             nativeService.entry.includes('\\') ||
@@ -110,14 +132,19 @@ export function parseManifest(value) {
             typeof nativeService.sha256 !== 'string' ||
             !/^[a-f0-9]{64}$/.test(nativeService.sha256) ||
             value.files[nativeService.entry] !== nativeService.sha256 ||
-            nativeService.protocolVersion !== 1) {
+            nativeService.protocolVersion !== 1 ||
+            (nativeService.lifecycle !== undefined &&
+                nativeService.lifecycle !== 'onDemand' &&
+                nativeService.lifecycle !== 'background')) {
             throw new ManifestValidationError('MANIFEST_NATIVE_SERVICE_INVALID', 'Native service identity must match the signed package');
         }
     }
-    const requestsHttpHost = value.permissions.some((permission) => typeof permission === 'string' && permission.startsWith('host.http.'));
+    const requestsNativeService = value.permissions.some((permission) => typeof permission === 'string' &&
+        NATIVE_SERVICE_PERMISSIONS.includes(permission));
     if ((hostMajor === '2') !== (nativeService !== undefined) ||
-        (requestsHttpHost && nativeService === undefined)) {
-        throw new ManifestValidationError('MANIFEST_NATIVE_SERVICE_REQUIRED', 'Native services and HTTP Host permissions require Host API 2.x');
+        (requestsNativeService && nativeService === undefined) ||
+        (nativeService?.lifecycle === 'background' && !requestsNativeService)) {
+        throw new ManifestValidationError('MANIFEST_NATIVE_SERVICE_REQUIRED', 'Native services and their Host permissions require Host API 2.x');
     }
     return value;
 }

@@ -301,4 +301,97 @@ describe('plugin catalog trust contract', () => {
         error.code === 'CATALOG_RELEASE_INVALID'
     );
   });
+
+  it('accepts download task Catalog permissions only on Host API 2.x', () => {
+    const downloadCatalog = structuredClone(catalog);
+    downloadCatalog.apps[0]!.appId = 'com.attson.aria2';
+    downloadCatalog.apps[0]!.channels.stable.hostApi = { min: '2.0.0', max: '2.x' };
+    downloadCatalog.apps[0]!.channels.stable.permissions = ['host.download.tasks'];
+
+    assert.deepEqual(
+      parsePluginCatalog(downloadCatalog).apps[0]?.channels.stable.permissions,
+      ['host.download.tasks']
+    );
+
+    downloadCatalog.apps[0]!.channels.stable.hostApi = { min: '1.0.0', max: '1.x' };
+    assert.throws(
+      () => parsePluginCatalog(downloadCatalog),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
+    );
+  });
+
+  it('accepts template project Catalog permissions only on Host API 2.x', () => {
+    const templateCatalog = structuredClone(catalog);
+    templateCatalog.apps[0]!.appId = 'com.attson.template';
+    templateCatalog.apps[0]!.channels.stable.hostApi = { min: '2.0.0', max: '2.x' };
+    templateCatalog.apps[0]!.channels.stable.permissions = ['host.template.project'];
+
+    assert.deepEqual(
+      parsePluginCatalog(templateCatalog).apps[0]?.channels.stable.permissions,
+      ['host.template.project']
+    );
+
+    templateCatalog.apps[0]!.channels.stable.hostApi = { min: '1.0.0', max: '1.x' };
+    assert.throws(
+      () => parsePluginCatalog(templateCatalog),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
+    );
+  });
+
+  it('accepts clipboard Catalog permissions only on Host API 2.x', () => {
+    const clipboardCatalog = structuredClone(catalog);
+    clipboardCatalog.apps[0]!.appId = 'com.attson.clipboard';
+    clipboardCatalog.apps[0]!.channels.stable.hostApi = { min: '2.0.0', max: '2.x' };
+    clipboardCatalog.apps[0]!.channels.stable.permissions = [
+      'host.ui.auxiliary',
+      'host.clipboard.history'
+    ];
+
+    assert.deepEqual(
+      parsePluginCatalog(clipboardCatalog).apps[0]?.channels.stable.permissions,
+      ['host.ui.auxiliary', 'host.clipboard.history']
+    );
+
+    clipboardCatalog.apps[0]!.channels.stable.hostApi = { min: '1.0.0', max: '1.x' };
+    assert.throws(
+      () => parsePluginCatalog(clipboardCatalog),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
+    );
+  });
+
+  it('classifies app utility and video extraction Catalog permissions by Host API major', () => {
+    const appUtilityCatalog = structuredClone(catalog);
+    appUtilityCatalog.apps[0]!.channels.stable.permissions = [
+      'host.app.activate',
+      'host.clipboard.write',
+      'host.external.open'
+    ];
+    assert.deepEqual(
+      parsePluginCatalog(appUtilityCatalog).apps[0]?.channels.stable.permissions,
+      ['host.app.activate', 'host.clipboard.write', 'host.external.open']
+    );
+
+    const videoCatalog = structuredClone(catalog);
+    videoCatalog.apps[0]!.appId = 'com.attson.video';
+    videoCatalog.apps[0]!.channels.stable.hostApi = { min: '2.0.0', max: '2.x' };
+    videoCatalog.apps[0]!.channels.stable.permissions = ['host.video.extract'];
+    assert.deepEqual(
+      parsePluginCatalog(videoCatalog).apps[0]?.channels.stable.permissions,
+      ['host.video.extract']
+    );
+
+    videoCatalog.apps[0]!.channels.stable.hostApi = { min: '1.0.0', max: '1.x' };
+    assert.throws(
+      () => parsePluginCatalog(videoCatalog),
+      (error) =>
+        error instanceof CatalogValidationError &&
+        error.code === 'CATALOG_RELEASE_INVALID'
+    );
+  });
 });
